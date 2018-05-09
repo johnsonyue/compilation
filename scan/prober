@@ -40,13 +40,13 @@ nohup bash -c "scamper -c 'trace' -p 600 -C $timestamp -o $prefix.warts -O warts
 
 #report back start-up result.
 test ! -z "$(ps -ef | grep -v grep | grep -e "scamper.*$prefix.*")" \
-&& python -c "import json; d={}; d['status']=0; d['date']='$date'; d['out_file']='"$prefix.warts.tar.gz"'; print json.dumps(d);" \
+&& python -c "import json; d={}; d['status']=0; d['date']='$date'; d['out_file']='"$prefix.warts"'; print json.dumps(d);" \
 || python -c "import json; d={}; d['status']=-1; print json.dumps(d);"
 
 #daemon process
 export -f write_log
 #nohup bash -c "while true; do test -z \"\$(ps -ef | grep -v grep | grep -e \"scamper.*$prefix.*\")\" && write_log $prefix.log end_time \$(date +%Y%m%d-%H:%M:%S) && exit; sleep 10; done" >/dev/null 2>&1 &
-nohup bash -c "while true; do test -z \"\$(ps -ef | grep -v grep | grep -e \"scamper.*$prefix.*\")\" && gzip $prefix.warts && write_log $prefix.log end_time \$(date +%Y%m%d-%H:%M:%S) && exit; sleep 10; done" >/dev/null 2>&1 &
+nohup bash -c "while true; do test -z \"\$(ps -ef | grep -v grep | grep -e \"scamper.*$prefix.*\")\" write_log $prefix.log end_time \$(date +%Y%m%d-%H:%M:%S) && exit; sleep 10; done" >/dev/null 2>&1 &
 }
 
 ar(){ #alias resolution
@@ -75,6 +75,14 @@ test -f $prefix.log && test ! -z "$(cat $prefix.log | grep end_time)" \
 || python -c "import json; d={}; d['status']=0; d['finished']=False; print json.dumps(d);"
 }
 
+delete(){
+prefix=$1
+
+test -f $prefix.log && test ! -z "$(cat $prefix.log | grep end_time)" \
+&& rm $prefix.warts && python -c "import json; d={}; d['status']=0; d['deleted']=True; print json.dumps(d);" \
+|| python -c "import json; d={}; d['status']=0; d['deleted']=False; print json.dumps(d);"
+}
+
 usage(){
   echo "prober <\$commands> [\$args...]"
   echo "COMMANDS:"
@@ -98,6 +106,10 @@ case $cmd in
   "check")
     test $# -lt 2 && usage && exit
     check $2
+    ;;
+  "delete")
+    test $# -lt 2 && usage && exit
+    delete $2
     ;;
   "*")
     usage

@@ -37,12 +37,29 @@ sync_file(){
   data_dir=$(vp_conf $vp data_dir); code_dir=$(vp_conf $vp code_dir)
 
   expect -c "set timeout -1
-  spawn rsync -avrt --copy-links -e \"ssh -p $ssh_port\" $username@$ip:$data_dir/$(basename $prefix).warts.gz $directory
+  spawn rsync -avrt --copy-links -e \"ssh -p $ssh_port\" $username@$ip:$data_dir/$(basename $prefix).warts $directory
   expect -re \".*password.*\" {send \"$password\r\"}
   expect eof"
   
   expect -c "set timeout -1
   spawn ssh $username@$ip -p $ssh_port \"$code_dir/prober check $data_dir/$(basename $prefix)\"
+  expect -re \".*password.*\" {send \"$password\r\"}
+  expect eof"
+}
+
+delete_file(){
+  target_file_path=$1
+  vp=$2
+  directory=$3
+
+  prefix=$(echo $target_file_path | sed 's/\.targets$//')
+  username=$(vp_conf $vp username); ip=$(vp_conf $vp ip); ssh_port=$(vp_conf $vp ssh_port); printf -v password "%q" "$(vp_conf $vp password)";
+  data_dir=$(vp_conf $vp data_dir); code_dir=$(vp_conf $vp code_dir)
+
+  #gzip $directory/$(basename $prefix).warts
+
+  expect -c "set timeout -1
+  spawn ssh $username@$ip -p $ssh_port \"$code_dir/prober delete $data_dir/$(basename $prefix)\"
   expect -re \".*password.*\" {send \"$password\r\"}
   expect eof"
 }
@@ -58,7 +75,7 @@ run_trace(){
   #periodically sync
   while true; do
     read r < <(sync_file $target_file_path $vp $directory | tee >(tail -n1) >&2 | python -c "import json; o=json.loads(raw_input()); print o['finished']")
-    test "$r"x == "True"x && exit
+    test "$r"x == "True"x && (delete_file $target_file_path $vp $directory; exit)
     sleep 200
   done
 }
