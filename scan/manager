@@ -75,7 +75,7 @@ run_trace(){
   #periodically sync
   while true; do
     read r < <(sync_file $target_file_path $vp $directory | tee >(tail -n1) >&2 | python -c "import json; o=json.loads(raw_input()); print o['finished']")
-    test "$r"x == "True"x && (delete_file $target_file_path $vp $directory; exit)
+    test "$r"x == "True"x && delete_file $target_file_path $vp $directory && exit
     sleep 200
   done
 }
