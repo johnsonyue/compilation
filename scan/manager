@@ -4,6 +4,7 @@ vp_conf(){
   | grep $2 | cut -d' ' -f2
 }
 
+# traceroute
 start_trace(){
   target_file_path=$1
   vp=$2
@@ -47,7 +48,7 @@ sync_file(){
   expect eof"
 }
 
-delete_file(){
+delete_warts_file(){
   target_file_path=$1
   vp=$2
   directory=$3
@@ -56,10 +57,15 @@ delete_file(){
   username=$(vp_conf $vp username); ip=$(vp_conf $vp ip); ssh_port=$(vp_conf $vp ssh_port); printf -v password "%q" "$(vp_conf $vp password)";
   data_dir=$(vp_conf $vp data_dir); code_dir=$(vp_conf $vp code_dir)
 
-  #gzip $directory/$(basename $prefix).warts
+  gzip $directory/$(basename $prefix).warts
 
   expect -c "set timeout -1
-  spawn ssh $username@$ip -p $ssh_port \"$code_dir/prober delete $data_dir/$(basename $prefix)\"
+  spawn ssh $username@$ip -p $ssh_port \"$code_dir/prober delete $data_dir/$(basename $prefix).warts $data_dir/$(basename $prefix).log\"
+  expect -re \".*password.*\" {send \"$password\r\"}
+  expect eof"
+
+  expect -c "set timeout -1
+  spawn ssh $username@$ip -p $ssh_port \"$code_dir/prober delete $data_dir/$(basename $prefix).targets $data_dir/$(basename $prefix).log\"
   expect -re \".*password.*\" {send \"$password\r\"}
   expect eof"
 }
@@ -75,8 +81,97 @@ run_trace(){
   #periodically sync
   while true; do
     read r < <(sync_file $target_file_path $vp $directory | tee >(tail -n1) >&2 | python -c "import json; o=json.loads(raw_input()); print o['finished']")
-    test "$r"x == "True"x && delete_file $target_file_path $vp $directory && exit
-    sleep 200
+    test "$r"x == "True"x && delete_warts_file $target_file_path $vp $directory
+    test "$r"x == "True"x && break
+    sleep 10
+  done
+}
+
+# alias resolution
+start_ar(){
+  ifaces_file_path=$1
+  vp=$2
+
+  username=$(vp_conf $vp username); ip=$(vp_conf $vp ip); ssh_port=$(vp_conf $vp ssh_port); printf -v password "%q" "$(vp_conf $vp password)";
+  data_dir=$(vp_conf $vp data_dir); code_dir=$(vp_conf $vp code_dir);
+
+  expect -c "set timeout -1
+  spawn ssh $username@$ip -p $ssh_port \"mkdir -p $data_dir\"
+  expect -re \".*password.*\" {send \"$password\r\"}
+  expect eof"
+
+  expect -c "set timeout -1
+  spawn scp -P $ssh_port $ifaces_file_path $username@$ip:$data_dir
+  expect -re \".*password.*\" {send \"$password\r\"}
+  expect eof"
+
+  expect -c "set timeout -1
+  spawn ssh $username@$ip -p $ssh_port \"$code_dir/prober ar $data_dir/$(basename $ifaces_file_path)\"
+  expect -re \".*password.*\" {send \"$password\r\"}
+  expect eof"
+}
+
+check_ar(){
+  ifaces_file_path=$1
+  vp=$2
+  directory=$3
+
+  prefix=$(echo $ifaces_file_path | sed 's/\.ifaces$//')
+  username=$(vp_conf $vp username); ip=$(vp_conf $vp ip); ssh_port=$(vp_conf $vp ssh_port); printf -v password "%q" "$(vp_conf $vp password)";
+  data_dir=$(vp_conf $vp data_dir); code_dir=$(vp_conf $vp code_dir)
+
+  expect -c "set timeout -1
+  spawn ssh $username@$ip -p $ssh_port \"$code_dir/prober check $data_dir/$(basename $prefix).ar\"
+  expect -re \".*password.*\" {send \"$password\r\"}
+  expect eof"
+}
+
+delete_iffout_file(){
+  ifaces_file_path=$1
+  vp=$2
+  directory=$3
+
+  prefix=$(echo $ifaces_file_path | sed 's/\.ifaces$//')
+  username=$(vp_conf $vp username); ip=$(vp_conf $vp ip); ssh_port=$(vp_conf $vp ssh_port); printf -v password "%q" "$(vp_conf $vp password)";
+  data_dir=$(vp_conf $vp data_dir); code_dir=$(vp_conf $vp code_dir)
+
+  #fetch iffout
+  expect -c "set timeout -1
+  spawn rsync -avrt --copy-links -e \"ssh -p $ssh_port\" $username@$ip:$data_dir/$(basename $prefix).iffout $directory
+  expect -re \".*password.*\" {send \"$password\r\"}
+  expect eof"
+
+  #delete iffout, ifferr and ifaces
+  expect -c "set timeout -1
+  spawn ssh $username@$ip -p $ssh_port \"$code_dir/prober delete $data_dir/$(basename $prefix).iffout $data_dir/$(basename $prefix).ar.log\"
+  expect -re \".*password.*\" {send \"$password\r\"}
+  expect eof"
+
+  expect -c "set timeout -1
+  spawn ssh $username@$ip -p $ssh_port \"$code_dir/prober delete $data_dir/$(basename $prefix).ifferr $data_dir/$(basename $prefix).ar.log\"
+  expect -re \".*password.*\" {send \"$password\r\"}
+  expect eof"
+
+  expect -c "set timeout -1
+  spawn ssh $username@$ip -p $ssh_port \"$code_dir/prober delete $data_dir/$(basename $prefix).ifaces $data_dir/$(basename $prefix).ar.log\"
+  expect -re \".*password.*\" {send \"$password\r\"}
+  expect eof"
+}
+
+run_ar(){
+  ifaces_file_path=$1
+  vp=$2
+  directory=$3
+
+  #start
+  read r < <(start_ar $ifaces_file_path $vp | tee >(tail -n1) >&2 | python -c "import json; o=json.loads(raw_input()); print o['status']")
+  test $r -ne 0 && exit
+  #periodically sync
+  while true; do
+    read r < <(check_ar $ifaces_file_path $vp $directory | tee >(tail -n1) >&2 | python -c "import json; o=json.loads(raw_input()); print o['finished']")
+    test "$r"x == "True"x && delete_iffout_file $ifaces_file_path $vp $directory
+    test "$r"x == "True"x && break
+    sleep 10
   done
 }
 
@@ -98,11 +193,19 @@ case $cmd in
 
     mkdir -p $directory
     date=$(date +%Y%m%d-%H:%M:%S)
-    cd target/
+    
+    wd=$(pwd); cd target/
     ./target.sh gen_target_from_geodb -p $directory/$date.$vp
-    cd ../
+    cd $wd
     
     run_trace $directory/$date.$vp.targets $vp $directory
+
+    wd=$(pwd); cd ../analyze;
+    ./run.sh warts2link $directory/$date.$vp.warts.gz;
+    ./run.sh link2iface $directory/$date.$vp.links;
+    cd $wd;
+
+    run_ar $directory/$date.$vp.ifaces $vp $directory
     ;;
   "*")
     usage

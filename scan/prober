@@ -45,7 +45,6 @@ test ! -z "$(ps -ef | grep -v grep | grep -e "scamper.*$prefix.*")" \
 
 #daemon process
 export -f write_log
-#nohup bash -c "while true; do test -z \"\$(ps -ef | grep -v grep | grep -e \"scamper.*$prefix.*\")\" && write_log $prefix.log end_time \$(date +%Y%m%d-%H:%M:%S) && exit; sleep 10; done" >/dev/null 2>&1 &
 nohup bash -c "while true; do test -z \"\$(ps -ef | grep -v grep | grep -e \"scamper.*$prefix.*\")\" && write_log $prefix.log end_time \$(date +%Y%m%d-%H:%M:%S) && exit; sleep 10; done" >/dev/null 2>&1 &
 }
 
@@ -55,16 +54,20 @@ prefix=$(echo $iface_file_path | sed 's/\.ifaces$//')
 
 date=$(date +%Y%m%d-%H:%M:%S)
 timestamp=$(date +%s)
-write_log $prefix.log start_time $date
-write_log $prefix.log target_num $(cat $target_file <(echo) | grep -v "^$" | wc -l)
+write_log $prefix.ar.log start_time $date
+write_log $prefix.ar.log target_num $(cat $target_file <(echo) | grep -v "^$" | wc -l)
 
 #start iffinder in background
-iffinder=$(python -c "import json; conf=json.load(open('config.json')); print conf['iffinder'];")
-$iffinder -d -o $prefix -c 200 -r 500 $iface_file_path
+iffinder -d -o $prefix -c 200 -r 500 $iface_file_path
+
+#report back start-up result.
+test ! -z "$(ps -ef | grep -v grep | grep -e "iffinder.*$prefix.*")" \
+&& python -c "import json; d={}; d['status']=0; d['date']='$date'; d['out_file']='"$prefix.iffout"'; print json.dumps(d);" \
+|| python -c "import json; d={}; d['status']=-1; print json.dumps(d);"
 
 #daemon process
 export -f write_log
-nohup bash -c "while true; do test -z \"\$(ps -ef | grep -v grep | grep -e \"iffinder.*$prefix.*\")\" && write_log $prefix.log end_time \$(date +%Y%m%d-%H:%M:%S) && tar zcvf $prefix.iffinder.out.tar.gz $prefix.iffinder.out && ls $prefix.iffinder.* | grep -v '\\.tar\\.gz' | while read l; do rm \$l; done && exit; sleep 10; done" >/dev/null 2>&1 &
+nohup bash -c "while true; do test -z \"\$(ps -ef | grep -v grep | grep -e \"iffinder.*$prefix.*\")\" && write_log $prefix.ar.log end_time \$(date +%Y%m%d-%H:%M:%S) && exit; sleep 10; done" >/dev/null 2>&1 &
 }
 
 check(){
@@ -76,10 +79,11 @@ test -f $prefix.log && test ! -z "$(cat $prefix.log | grep end_time)" \
 }
 
 delete(){
-prefix=$1
+file_path=$1
+log_path=$2
 
-test -f $prefix.log && test ! -z "$(cat $prefix.log | grep end_time)" \
-&& rm $prefix.warts && python -c "import json; d={}; d['status']=0; d['deleted']=True; print json.dumps(d);" \
+test -f $log_path && test ! -z "$(cat $log_path | grep end_time)" \
+&& rm $file_path && python -c "import json; d={}; d['status']=0; d['deleted']=True; print json.dumps(d);" \
 || python -c "import json; d={}; d['status']=0; d['deleted']=False; print json.dumps(d);"
 }
 
@@ -108,8 +112,8 @@ case $cmd in
     check $2
     ;;
   "delete")
-    test $# -lt 2 && usage && exit
-    delete $2
+    test $# -lt 3 && usage && exit
+    delete $2 $3
     ;;
   "*")
     usage
