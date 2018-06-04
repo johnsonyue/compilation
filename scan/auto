@@ -1,0 +1,92 @@
+#!/bin/bash
+usage(){
+  echo "auto <\$commands> [\$args...]"
+  echo "COMMANDS:"
+  echo "  [-f <\$input_file>] [-a] run_trace <\$vp> <\$directory>"
+  echo "  run_ar <\$vp> <\$ifaces_filepath>"
+}
+
+test $# -lt 1 && usage && exit
+
+#parse cmd line args.
+OPTIND=1
+while getopts "f:a" opt; do
+  case "$opt" in
+    f)
+      file=$OPTARG ;;
+    a)
+      ar="TRUE" ;;
+    *)
+      usage
+      exit;;
+  esac
+done
+
+shift $((OPTIND-1))
+
+cmd=$1
+case $cmd in
+  "run_trace")
+    test $# -lt 3 && usage && exit
+
+    vp=$2
+    directory=$(realpath $3)
+
+    if test -z "$file"; then
+      date=$(date +%Y%m%d-%H:%M:%S)
+      prefix=$date.$vp #use date.vp as prefix of .targets file
+      ./run.sh $vp target $directory/$prefix
+    else
+      prefix=$(basename $file).$vp
+      cp $file $directory/$prefix.targets
+    fi
+    
+    read r < <(./run.sh $vp start_probe tr $directory/$prefix.targets | tee >(tail -n1) >&2 | python -c "import json; o=json.loads(raw_input()); print o['status']")
+    test $r -ne 0 && exit
+
+    while true; do
+      ./run.sh $vp remote_file fetch $prefix.warts $directory
+      read r < <(./run.sh $vp start_probe check $prefix | tee >(tail -n1) >&2 | python -c "import json; o=json.loads(raw_input()); print o['finished']")
+      test "$r"x == "True"x && ./run.sh $vp remote_file delete $prefix.warts
+      test "$r"x == "True"x && break
+      sleep 10
+    done
+    gzip $directory/$prefix.warts
+
+    test -z "$ar" && exit
+    wd=$(pwd); cd ../analyze;
+    ./run.sh warts2link $directory/$prefix.warts.gz
+    ./run.sh link2iface $directory/$prefix.links
+    cd $wd;
+
+    ./auto run_ar $vp $directory/$prefix.ifaces
+    ;;
+
+  "run_ar")
+    test $# -lt 3 && usage && exit
+
+    vp=$2
+    ifaces_filepath=$3
+    prefix=$(echo $(basename $ifaces_filepath) | sed 's/\.ifaces$//')
+    directory=$(dirname $ifaces_filepath)
+
+    read r < <(./run.sh $vp start_probe ar $ifaces_filepath | tee >(tail -n1) >&2 | python -c "import json; o=json.loads(raw_input()); print o['status']")
+    test $r -ne 0 && exit
+
+    while true; do
+      read r < <(./run.sh $vp start_probe check $prefix | tee >(tail -n1) >&2 | python -c "import json; o=json.loads(raw_input()); print o['finished']")
+      if test "$r"x == "True"x; then
+        ./run.sh $vp remote_file fetch $prefix.iffout $directory
+        ./run.sh $vp remote_file delete $prefix.ifferr
+        ./run.sh $vp remote_file delete $prefix.iffout
+        ./run.sh $vp remote_file delete $prefix.ifaces
+        break
+      fi
+      sleep 10
+    done
+    ;;
+  "*")
+    usage
+    exit
+    ;;
+esac
