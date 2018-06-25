@@ -11,7 +11,7 @@ warts2link(){
 test $# -lt 1 && echo 'warts2link $prefix.warts[.tar.gz;.gz]' && exit
 
 input_file_path=$1
-prefix=$(echo $input_file_path | sed 's/\.gz//' | sed 's/\.tar//' | sed 's/\.warts//')
+prefix=$(echo $input_file_path | sed 's/\.gz$//' | sed 's/\.tar$//' | sed 's/\.warts$//')
 
 log $prefix #debug
 echo $prefix
