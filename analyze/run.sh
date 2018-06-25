@@ -16,7 +16,7 @@ prefix=$(echo $input_file_path | sed 's/\.gz//' | sed 's/\.tar//' | sed 's/\.war
 log $prefix #debug
 echo $prefix
 
-(test ! -z "$(echo $input_file_path | grep -E '\.tar\.gz$')" && tar zxf $input_file_path -O || gzip -cd $input_file_path) | (test ! -z "$(echo $input_file_path | grep -E 'warts')" && sc_warts2text || cat) | perl trace2link.pl -p $prefix -
+(test ! -z "$(echo $input_file_path | grep -E '\.tar\.gz$')" && tar zxf $input_file_path -O || test ! -z "$(echo $input_file_path | grep -E '\.gz$')" && gzip -cd $input_file_path || cat $input_file_path) | (test ! -z "$(echo $input_file_path | grep -E 'warts')" && sc_warts2text || cat) | perl trace2link.pl -p $prefix -
 #output_file_path: $prefix.links
 }
 
