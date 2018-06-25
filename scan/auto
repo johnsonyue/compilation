@@ -49,7 +49,7 @@ case $cmd in
       read r < <(./run.sh $vp start_probe check $prefix | tee >(tail -n1) >&2 | python -c "import json; o=json.loads(raw_input()); print o['finished']")
       test "$r"x == "True"x && ./run.sh $vp remote_file delete $prefix.warts
       test "$r"x == "True"x && break
-      sleep 10
+      sleep 300
     done
     gzip $directory/$prefix.warts
 
@@ -60,6 +60,20 @@ case $cmd in
     cd $wd;
 
     ./auto run_ar $vp $directory/$prefix.ifaces
+    ;;
+  
+  "run_ar_from_warts")
+    test $# -lt 3 && usage && exit
+    
+    vp=$2
+    warts_filepath=$3
+    prefix=$(echo $warts_filepath | sed 's/\.gz$//' | sed 's/\.warts$//')
+    wd=$(pwd); cd ../analyze;
+    ./run.sh warts2link $warts_filepath
+    ./run.sh link2iface $prefix.links
+    cd $wd;
+
+    ./auto run_ar $vp $prefix.ifaces
     ;;
 
   "run_ar")
@@ -82,7 +96,7 @@ case $cmd in
         ./run.sh $vp remote_file delete $prefix.ifaces
         break
       fi
-      sleep 10
+      sleep 300
     done
     ;;
   "*")
