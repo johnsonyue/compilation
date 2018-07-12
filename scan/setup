@@ -12,3 +12,11 @@ cd ../
 
 test ! -z "$(cat /etc/ld.so.conf | grep 'include /usr/local/lib')" && echo 'include /usr/local/lib' >>/etc/ld.so.conf
 ldconfig
+
+#iffinder
+wget --no-check-certificate https://www.caida.org/tools/measurement/iffinder/download/iffinder-1.38.tar.gz
+tar zxvf iffinder-1.38.tar.gz
+cd iffinder-1.38/
+./configure && make
+ln -s miniffinder /usr/local/bin/iffinder
+cd ../
