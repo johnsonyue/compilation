@@ -31,6 +31,7 @@ prefix=$(echo $target_file_path | sed 's/\.targets$//')
 
 timestamp=$(date +%s)
 date=$(date -d @$timestamp +%Y%m%d-%H:%M:%S)
+test -f $prefix.log && rm $prefix.log
 write_log $prefix.log start_time $date
 write_log $prefix.log target_num $(cat $target_file <(echo) | grep -v "^$" | wc -l)
 
@@ -54,6 +55,7 @@ prefix=$(echo $iface_file_path | sed 's/\.ifaces$//')
 
 date=$(date +%Y%m%d-%H:%M:%S)
 timestamp=$(date +%s)
+test -f $prefix.log && rm $prefix.log
 write_log $prefix.log start_time $date
 write_log $prefix.log target_num $(cat $target_file <(echo) | grep -v "^$" | wc -l)
 
